@@ -120,6 +120,7 @@ print("Total number of frames ",total_number_of_frames)
 final_vector_np = np.array(final_vector)
 np.save('final_vec_np.npy',final_vector_np)
 DIMENSION = H*D
+N_f = 8
 
 print("Final vector shape ",final_vector_np.shape)
 
@@ -131,10 +132,10 @@ pe_final_vector = positional_encoding(torch.tensor(final_vector_np))
 print("PE Final vector ",pe_final_vector.shape)
 
 slot_attn = SlotAttention(
-    num_slots = 3,
-    dim = 16384,
+    num_slots = N_f,
+    dim = 512,
     iters = 10
 )
 
-slots = slot_attn(pe_final_vector)
+slots = slot_attn(pe_final_vector[:,:,:512])
 print(slots.shape)
