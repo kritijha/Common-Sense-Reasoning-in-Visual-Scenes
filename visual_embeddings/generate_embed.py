@@ -27,7 +27,6 @@ def process_video(path):
             #cv2.imwrite('../Frames/frame%d.jpg'% count,img)
             #img = img.reshape((img.shape[2],img.shape[1],img.shape[0]))
             #print("Img shape ",img.shape)
-            int_opt = np.uint8(img)
             #print(int_opt.shape)
             im = Image.fromarray(np.uint8(img)).convert('RGB') 
             #print("Type after changing ",type(im))
@@ -88,7 +87,7 @@ process_video(video_path)
 final_vector = []
 frame_np_array = np.array(frame_array)
 #total_number_of_frames = len(frame_array)
-total_number_of_frames = 3
+total_number_of_frames = 5
 fast_network = fastBranch()
 time_start = time.time()
 for frame_idx in range(total_number_of_frames):
@@ -129,13 +128,30 @@ print("Final vector shape ",final_vector_np.shape)
 
 positional_encoding = PositionalEncoding(DIMENSION,max_len=total_number_of_frames)
 pe_final_vector = positional_encoding(torch.tensor(final_vector_np))
+pe_final_vector = pe_final_vector.reshape((pe_final_vector.shape[0],16,1024,total_number_of_frames))
 print("PE Final vector ",pe_final_vector.shape)
+pe_final_vector = pe_final_vector.reshape((pe_final_vector.shape[1],pe_final_vector.shape[2],pe_final_vector.shape[3]))
 
-slot_attn = SlotAttention(
-    num_slots = N_f,
-    dim = 512,
-    iters = 10
-)
+#pe_final_vector = pe_final_vector.reshape(pe_final_vector.shape[2],pe_final_vector.shape[1],pe_final_vector.shape[0])
+print("After reshape ",pe_final_vector.shape)
+slot_array = []
+for spatial_token_id in range(pe_final_vector.shape[0]):
+    spatial_token = pe_final_vector[spatial_token_id]
+    print("Spatial token shape ",spatial_token.shape)
+    T = spatial_token.shape[1]
+    D = spatial_token.shape[0]
+    print("T ",T)
+    print("D ",D)
+    spatial_token = spatial_token.reshape((1,T,D))
+    slot_attn = SlotAttention(
+        num_slots = N_f,
+        dim = D,
+        iters = 10
+    )
+    slots = slot_attn(spatial_token)
+    slots = slots.reshape((slots.shape[1],slots.shape[2]))
+    print(slots.shape)
+    slot_array.append(slots.detach().numpy())
 
-slots = slot_attn(pe_final_vector[:,:,:512])
-print(slots.shape)
+slot_array = np.array(slot_array)
+print("Slot array shape! ",slot_array.shape)
