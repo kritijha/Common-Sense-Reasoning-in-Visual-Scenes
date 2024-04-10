@@ -197,7 +197,7 @@ total_number_of_frames = features.shape[1]
 
 DIMENSION = H*D
 N_f = 8
-device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
+#device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
 # def __init__(self,pos_embed_dim,pos_max_len,total_number_of_frames,num_slots)
 model = Model(DIMENSION,total_number_of_frames,total_number_of_frames,N_f)
 model.to(device)
