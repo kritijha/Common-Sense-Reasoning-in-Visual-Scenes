@@ -80,9 +80,9 @@ class MLPDecoder(nn.Module):
         print("X shape after repeat ",x.shape)
 
         y_hat = self.mlp(x)  # Apply MLP to each token
-        alpha = F.softmax(y_hat, dim=1)  # Compute alpha map
+        alpha = F.softmax(y_hat, dim=2)  # Compute alpha map
 
-        y = (y_hat * alpha).sum(dim=1)  # Weighted sum across slots
+        y = (y_hat * alpha).sum(dim=2)  # Weighted sum across slots
 
         return y
         
@@ -95,7 +95,7 @@ class Model(nn.Module):
             dim = 1024,
             iters = 100
         )
-        self.decoder = MLPDecoder(num_slots,16*1024,total_number_of_frames,num_slots)
+        self.decoder = MLPDecoder(num_slots,127,total_number_of_frames,num_slots)
     def forward(self,inputs):
         inputs = inputs.to(device)
         inputs = self.pe(inputs)
