@@ -80,10 +80,13 @@ class MLPDecoder(nn.Module):
         print("X shape after repeat ",x.shape)
 
         y_hat = self.mlp(x)  # Apply MLP to each token
-        alpha = F.softmax(y_hat, dim=2)  # Compute alpha map
-
-        y = (y_hat * alpha).sum(dim=2)  # Weighted sum across slots
-
+        print("output of mlp ",y_hat.shape)
+        alpha = F.softmax(y_hat, dim=1)  # Compute alpha map
+        print("Alpha shape ",alpha.shape)
+        #inter = y_hat * alpha  # Intermediate result
+        #print("Inter shape ",inter.shape)
+        #y = (inter).sum(dim=1)  # Weighted sum across slots
+        y = y_hat
         return y
         
 class Model(nn.Module):
@@ -159,8 +162,8 @@ def create_dataset():
     for video_path in dataset_video_links:
         video_features = []
         frame_np_array = process_video(video_path)
-        #total_number_of_frames = len(frame_np_array)
-        total_number_of_frames = 20
+        total_number_of_frames = len(frame_np_array)
+        #total_number_of_frames = 20
         fast_network = fastBranch()
         time_start = time.time()
         for frame_idx in range(total_number_of_frames):
