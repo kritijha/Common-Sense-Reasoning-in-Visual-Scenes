@@ -31,7 +31,7 @@ class VideoChatGPTTrainer(Trainer):
                 _state_dict = model_to_save.state_dict()
 
             weight_to_save = {}
-            keys_to_match = ['mm_projector', 'embed_tokens', 'embed_in']
+            keys_to_match = ['mm_projector', 'embed_tokens', 'embed_in'] # update with respect to the projection layers
             for k, v in _state_dict.items():
                 if any(key_match in k for key_match in keys_to_match):
                     weight_to_save[k] = v
