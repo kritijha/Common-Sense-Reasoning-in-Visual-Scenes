@@ -105,10 +105,8 @@ def create_dataset():
         avg_pool = AvgPool()
         for frame_idx in range(total_number_of_frames):
             img = frame_np_array[frame_idx]
-            
             img = processor(images=img,return_tensors="pt")
-            height, width = img["pixel_values"].shape[2], img["pixel_values"].shape[3]
-
+            
             # Create a batch of dummy text inputs
             batch_size = img["pixel_values"].size(0)
             dummy_text_inputs = torch.zeros(batch_size, 1, dtype=torch.long, device=img["pixel_values"].device)
