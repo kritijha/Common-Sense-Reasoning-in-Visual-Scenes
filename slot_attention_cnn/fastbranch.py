@@ -136,6 +136,15 @@ import pickle
 with open('fast_out.pkl','wb') as f:
     pickle.dump(dataset_features, f)
 
+TMP_DIR = Path('../temp')
+TMP_DIR.mkdir(exist_ok=True)
+
+import zipfile
+import tempfile
 for video in dataset_features:
-    with open(video+'_fast.pkl','wb') as f:
+#     with open(str(TMP_DIR) + '/' + video+'_fast.pkl','wb') as f:
+#         pickle.dump(dataset_features[video], f)
+    with tempfile.NamedTemporaryFile(dir=TMP_DIR) as f:
         pickle.dump(dataset_features[video], f)
+        with zipfile.ZipFile('/kaggle/working/fast.zip', "a", compression=zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(f.name, video+'_fast.pkl')
