@@ -24,7 +24,9 @@ class COMPHY(Dataset):
     def __getitem__(self, index):
         path = self.files[index]
         frame_array = self.process(path)
-        return np.array(frame_array)
+        name = str(path).split('/')[6]
+        name = name.split('.')[0]
+        return np.array(frame_array), name
     
     def __len__(self):
         return len(self.files)
@@ -98,8 +100,8 @@ DIMENSION = H*D
 
 # Extract penultimate features
 def create_dataset():
-    dataset_features = []
-    for frame_np_array in tqdm(COMPHY('/kaggle/input/comphy/target')):
+    dataset_features = {}
+    for frame_np_array, name in tqdm(COMPHY('/kaggle/input/comphy/target')):
         final_vector = []
         total_number_of_frames = len(frame_np_array)
         avg_pool = AvgPool()
@@ -124,12 +126,16 @@ def create_dataset():
         pe_final_vector = pe_final_vector.reshape((pe_final_vector.shape[1],pe_final_vector.shape[2],pe_final_vector.shape[3]))
 
         feat = pe_final_vector.cpu().detach().numpy()
-        dataset_features.append(feat)
+        dataset_features[name] = feat
 
-    return np.array(dataset_features)
+    return dataset_features
 
 dataset_features = create_dataset()
 
 import pickle
 with open('fast_out.pkl','wb') as f:
     pickle.dump(dataset_features, f)
+
+for video in dataset_features:
+    with open(video+'_fast.pkl','wb') as f:
+        pickle.dump(dataset_features[video], f)
