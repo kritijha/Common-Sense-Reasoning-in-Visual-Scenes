@@ -22,7 +22,7 @@ def main():
     args = parse_args()
     input_json_file = args.input_json_file
     output_json_file = args.output_json_file
-    clip_feature_path = args.clip_feature_path  # used to check to only process the videos for which we have the features, in our case it would be video
+    clip_feature_path = args.clip_feature_path  
 
     clip_features_files_witout_extension = ""
     if clip_feature_path:
@@ -42,13 +42,13 @@ def main():
             valid = True
 
         if valid:
-            output_content = {'id': content['video_id'], 'video': content['video_id'], 'conversations': []}
+            output_content = {'id': content['video_id'], 'video': f"{content['video_id']}.pkl", 'conversations': []}
             # This is critical
             if i % 2 == 0:
-                output_content['conversations'].append({'from': 'human', 'value': f"{content['question']}\n<video>"})
+                output_content['conversations'].append({'from': 'human', 'value': f"{content['q']}\n<video>"})
             else:
-                output_content['conversations'].append({'from': 'human', 'value': f"<video>\n{content['question']}"})
-            output_content['conversations'].append({'from': 'gpt', 'value': content['answer']})
+                output_content['conversations'].append({'from': 'human', 'value': f"<video>\n{content['q']}"})
+            output_content['conversations'].append({'from': 'gpt', 'value': content['a']})
             output_json_contents.append(output_content)
 
     print(f"Total annotations retained: {len(output_json_contents)}")

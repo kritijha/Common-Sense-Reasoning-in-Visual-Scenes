@@ -25,31 +25,31 @@ DEFAULT_UNK_TOKEN = "<unk>"
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
     version: Optional[str] = field(default="v0")
-    freeze_backbone: bool = field(default=True)
-    tune_mm_mlp_adapter: bool = field(default=True)
-    # pretrain_mm_mlp_adapter: Optional[str] = field(default=None)
-    mm_use_vid_start_end: bool = field(default=True)
+    freeze_backbone: bool = field(default=False)
+    tune_mm_mlp_adapter: bool = field(default=False)
+    pretrain_mm_mlp_adapter: Optional[str] = field(default=None)
+    mm_use_vid_start_end: bool = field(default=False)
 
 
 @dataclass
 class DataArguments:
     data_path: str = field(default=None,
                            metadata={"help": "Path to the training data."})
-    # lazy_preprocess: bool = False
-    is_multimodal: bool = True
+    lazy_preprocess: bool = False
+    is_multimodal: bool = False
     sep_video_conv_front: bool = False
     video_token_len: int = 0
     video_folder: Optional[str] = field(default=None)
-    # frame_aspect_ratio: str = 'square'
+    frame_aspect_ratio: str = 'square'
 
 
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
-    # cache_dir: Optional[str] = field(default=None)
-    optim: str = field(default="adamw_torch") # check again
-    # remove_unused_columns: bool = field(default=False)
-    # freeze_mm_mlp_adapter: bool = field(default=False)
-    force_fsdp: bool = field(default=True) #can't figure out where its being used
+    cache_dir: Optional[str] = field(default=None)
+    optim: str = field(default="adamw_torch")
+    remove_unused_columns: bool = field(default=False)
+    freeze_mm_mlp_adapter: bool = field(default=False)
+    force_fsdp: bool = field(default=False)
     model_max_length: int = field(
         default=512,
         metadata={
@@ -158,8 +158,8 @@ def preprocess_multimodal(
 ) -> Dict:
     is_multimodal = multimodal_cfg['is_multimodal']
     video_token_len = cur_token_len
-    # if not is_multimodal:
-    #     return sources
+    if not is_multimodal:
+        return sources
 
     for source in sources:
         if multimodal_cfg['sep_video_conv_front']:
@@ -353,27 +353,27 @@ def preprocess(
     return dict(input_ids=input_ids, labels=targets)
 
 
-# class SupervisedDataset(Dataset):
-#     """Dataset for supervised fine-tuning."""
+class SupervisedDataset(Dataset):
+    """Dataset for supervised fine-tuning."""
 
-#     def __init__(self, data_path: str,
-#                  tokenizer: transformers.PreTrainedTokenizer):
-#         super(SupervisedDataset, self).__init__()
-#         logging.warning("Loading data...")
-#         list_data_dict = json.load(open(data_path, "r"))
+    def __init__(self, data_path: str,
+                 tokenizer: transformers.PreTrainedTokenizer):
+        super(SupervisedDataset, self).__init__()
+        logging.warning("Loading data...")
+        list_data_dict = json.load(open(data_path, "r"))
 
-#         logging.warning("Formatting inputs...")
-#         sources = [example["conversations"] for example in list_data_dict]
-#         data_dict = preprocess(sources, tokenizer)
+        logging.warning("Formatting inputs...")
+        sources = [example["conversations"] for example in list_data_dict]
+        data_dict = preprocess(sources, tokenizer)
 
-#         self.input_ids = data_dict["input_ids"]
-#         self.labels = data_dict["labels"]
+        self.input_ids = data_dict["input_ids"]
+        self.labels = data_dict["labels"]
 
-#     def __len__(self):
-#         return len(self.input_ids)
+    def __len__(self):
+        return len(self.input_ids)
 
-#     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
-#         return dict(input_ids=self.input_ids[i], labels=self.labels[i])
+    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+        return dict(input_ids=self.input_ids[i], labels=self.labels[i])
 
 
 class LazySupervisedDataset(Dataset):
@@ -402,10 +402,16 @@ class LazySupervisedDataset(Dataset):
         if 'video' in sources[0]:
             video_file = self.list_data_dict[i]['video']
             video_folder = self.multimodal_cfg['video_folder']
-            with open(f"{video_folder}/{video_file}", "rb") as f:
-                features = pickle.load(f)
+            # with open(f"{video_folder}/{video_file}", "rb") as f:
+            #     features = pickle.load(f)
 
-            cur_token_len = 356  # 100 temporal + 256 spatial - in our case, num features from slow and fast slots
+            with open(f"{video_folder}/slow/{video_file}", "rb") as f:
+                slow_features = pickle.load(f)
+
+            with open(f"{video_folder}/fast/{video_file}", "rb") as f:
+                fast_features = pickle.load(f)
+
+            cur_token_len = 17  # 100 temporal + 256 spatial, TODO: Hard Coding is not good
             sources = preprocess_multimodal(
                 copy.deepcopy([e["conversations"] for e in sources]),
                 self.multimodal_cfg, cur_token_len)
@@ -418,8 +424,12 @@ class LazySupervisedDataset(Dataset):
                              labels=data_dict["labels"][0])
 
         # video exist in the data
-        if 'video' in self.list_data_dict[i]:
-            data_dict["video"] = features
+        # if 'video' in self.list_data_dict[i]:
+        #     data_dict["video"] = features
+        if 'video_slow' in self.list_data_dict[i]:
+            data_dict["video_slow"] = slow_features
+        if 'video_fast' in self.list_data_dict[i]:
+            data_dict["video_fast"] = fast_features
 
         return data_dict
 
@@ -446,12 +456,23 @@ class DataCollatorForSupervisedDataset(object):
             attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
         )
 
-        if 'video' in instances[0]:
-            features = [torch.tensor(instance['video']) for instance in instances]
-            if all(x is not None and x.shape == features[0].shape for x in features):
-                batch['video_spatio_temporal_features'] = torch.stack(features)
-            # else:
-            #     batch['video_spatio_temporal_features'] = features #redundant as shape is going to be the same
+        # if 'video' in instances[0]:
+        #     features = [torch.tensor(instance['video']) for instance in instances]
+        #     if all(x is not None and x.shape == features[0].shape for x in features):
+        #         batch['video_spatio_temporal_features'] = torch.stack(features)
+        #     else:
+        #         batch['video_spatio_temporal_features'] = features
+        if 'video_slow' in instances[0] and 'video_fast' in instances[0]:
+            features_slow = [torch.tensor(instance['video_slow']) for instance in instances]
+            features_fast = [torch.tensor(instance['video_fast']) for instance in instances]
+            if all(x is not None and x.shape == features_slow[0].shape for x in features_slow):
+                batch['video_spatio_temporal_features_slow'] = torch.stack(features_slow)
+            else:
+                batch['video_spatio_temporal_features_slow'] = features_slow
+            if all(x is not None and x.shape == features_fast[0].shape for x in features_fast):
+                batch['video_spatio_temporal_features_fast'] = torch.stack(features_fast)
+            else:
+                batch['video_spatio_temporal_features_fast'] = features_fast
 
         return batch
 
@@ -459,7 +480,8 @@ class DataCollatorForSupervisedDataset(object):
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
                                 data_args) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
-    dataset_cls = LazySupervisedDataset# if data_args.lazy_preprocess else SupervisedDataset)
+    dataset_cls = (LazySupervisedDataset
+                   if data_args.lazy_preprocess else SupervisedDataset)
     train_dataset = dataset_cls(tokenizer=tokenizer,
                                 data_path=data_args.data_path,
                                 multimodal_cfg=dict(
@@ -467,7 +489,7 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
                                     sep_video_conv_front=data_args.sep_video_conv_front,
                                     video_token_len=data_args.video_token_len,
                                     video_folder=data_args.video_folder,
-                                    # frame_aspect_ratio=data_args.frame_aspect_ratio,
+                                    frame_aspect_ratio=data_args.frame_aspect_ratio,
                                     use_vid_start_end=getattr(data_args, 'mm_use_vid_start_end', False)))
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset,
@@ -482,17 +504,17 @@ def train():
 
     model = VideoChatGPTLlamaForCausalLM.from_pretrained(
         model_args.model_name_or_path,
-        # cache_dir=training_args.cache_dir,
+        cache_dir=training_args.cache_dir,
         # torch_dtype=torch.bfloat16 if training_args.bf16 else torch.float,
     )
-    # model.config.use_cache = False
+    model.config.use_cache = False
 
-    # if model_args.freeze_backbone:
-    #     model.model.requires_grad_(False)
+    if model_args.freeze_backbone:
+        model.model.requires_grad_(False)
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
-        # cache_dir=training_args.cache_dir,
+        cache_dir=training_args.cache_dir,
         model_max_length=training_args.model_max_length,
         padding_side="right",
         use_fast=False,
@@ -500,13 +522,13 @@ def train():
 
     conversation_lib.default_conversation = conversation_lib.conv_templates["vicuna_v1_1"]
 
-    # model_vision_dict = model.get_model().initialize_vision_modules(
-    #     pretrain_mm_mlp_adapter=model_args.pretrain_mm_mlp_adapter
-    # )
-    # vision_config = model_vision_dict['vision_config']
+    model_vision_dict = model.get_model().initialize_vision_modules(
+        pretrain_mm_mlp_adapter=model_args.pretrain_mm_mlp_adapter
+    )
+    vision_config = model_vision_dict['vision_config']
 
     data_args.video_token_len = model_vision_dict['video_token_len']
-    # data_args.is_multimodal = True
+    data_args.is_multimodal = True
 
     model.config.tune_mm_mlp_adapter = training_args.tune_mm_mlp_adapter = model_args.tune_mm_mlp_adapter
     if model_args.tune_mm_mlp_adapter:
@@ -514,13 +536,13 @@ def train():
         for p in model.get_model().mm_projector.parameters():
             p.requires_grad = True
 
-    # model.config.freeze_mm_mlp_adapter = training_args.freeze_mm_mlp_adapter
-    # if training_args.freeze_mm_mlp_adapter:
-    #     for p in model.get_model().mm_projector.parameters():
-    #         p.requires_grad = False
+    model.config.freeze_mm_mlp_adapter = training_args.freeze_mm_mlp_adapter
+    if training_args.freeze_mm_mlp_adapter:
+        for p in model.get_model().mm_projector.parameters():
+            p.requires_grad = False
 
     model.config.mm_use_vid_start_end = data_args.mm_use_vid_start_end = model_args.mm_use_vid_start_end
-    # vision_config.use_vid_start_end = training_args.use_vid_start_end = model_args.mm_use_vid_start_end
+    vision_config.use_vid_start_end = training_args.use_vid_start_end = model_args.mm_use_vid_start_end
     model.config.sep_video_conv_front = data_args.sep_video_conv_front
     model.initialize_vision_tokenizer(mm_use_vid_start_end=model_args.mm_use_vid_start_end, tokenizer=tokenizer,
                                       device=training_args.device, tune_mm_mlp_adapter=model_args.tune_mm_mlp_adapter,
