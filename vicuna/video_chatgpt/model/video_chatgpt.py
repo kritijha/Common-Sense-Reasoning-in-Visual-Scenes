@@ -38,8 +38,8 @@ class VideoChatGPTLlamaModel(LlamaModel):
             self.vision_config = VisionConfig()
 
         # if hasattr(config, "use_mm_proj"):
-        self.s_projector = nn.Linear(config.slow_size, config.hidden_size)
-        self.f_projector = nn.Linear(config.fast_size, config.hidden_size)
+        self.s_projector = nn.Linear(self.vision_config.slow_size, config.hidden_size)
+        self.f_projector = nn.Linear(self.vision_config.fast_size, config.hidden_size)
         self.mm_projector = nn.Linear(config.hidden_size, config.hidden_size)
 
     def initialize_vision_modules(self, pretrain_mm_mlp_adapter=None, tune_mm_mlp_adapter=False):
