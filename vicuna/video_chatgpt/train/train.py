@@ -35,7 +35,7 @@ class ModelArguments:
 class DataArguments:
     data_path: str = field(default=None,
                            metadata={"help": "Path to the training data."})
-    lazy_preprocess: bool = False
+    lazy_preprocess: bool = True
     is_multimodal: bool = False
     sep_video_conv_front: bool = False
     video_token_len: int = 0
@@ -404,7 +404,7 @@ class LazySupervisedDataset(Dataset):
             video_folder = self.multimodal_cfg['video_folder']
             # with open(f"{video_folder}/{video_file}", "rb") as f:
             #     features = pickle.load(f)
-
+            video_file = video_file.strip('sim_').strip('.mp4').strip('video_')
             with open(f"{video_folder}/slow/{video_file}", "rb") as f:
                 slow_features = pickle.load(f)
 
