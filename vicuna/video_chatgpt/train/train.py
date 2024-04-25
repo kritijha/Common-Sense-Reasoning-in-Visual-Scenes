@@ -1,3 +1,31 @@
+# torchrun --nproc_per_node=8 --master_port 29001 video_chatgpt/train/train_mem.py \
+#           --model_name_or_path <path to LLaVA-7B-Lightening-v-1-1 model> \
+#           --version v1 \
+#           --data_path <path to the video_chatgpt using `convert_instruction_json_to_training_format.py` script.> \
+#           --video_folder <path to the spatio-temporal features generated in step 4 using `save_spatio_temporal_clip_features.py` script> \
+#           --tune_mm_mlp_adapter True \
+#           --mm_use_vid_start_end True\
+#           --bf16 True \
+#           --output_dir ./Video-ChatGPT_7B-1.1_Checkpoints \
+#           --num_train_epochs 3 \
+#           --per_device_train_batch_size 4 \
+#           --per_device_eval_batch_size 4 \
+#           --gradient_accumulation_steps 1 \
+#           --evaluation_strategy "no" \
+#           --save_strategy "steps" \
+#           --save_steps 3000 \
+#           --save_total_limit 3 \
+#           --learning_rate 2e-5 \
+#           --weight_decay 0. \
+#           --warmup_ratio 0.03 \
+#           --lr_scheduler_type "cosine" \
+#           --logging_steps 100 \
+#           --tf32 True \
+#           --model_max_length 2048 \
+#           --gradient_checkpointing True \
+#           --fsdp \
+#           --force_fsdp True
+
 import copy
 from dataclasses import dataclass, field
 import json
@@ -25,10 +53,10 @@ DEFAULT_UNK_TOKEN = "<unk>"
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
     version: Optional[str] = field(default="v0")
-    freeze_backbone: bool = field(default=False)
+    freeze_backbone: bool = field(default=True)
     tune_mm_mlp_adapter: bool = field(default=False)
     pretrain_mm_mlp_adapter: Optional[str] = field(default=None)
-    mm_use_vid_start_end: bool = field(default=False)
+    mm_use_vid_start_end: bool = field(default=True)
 
 
 @dataclass
@@ -37,7 +65,7 @@ class DataArguments:
                            metadata={"help": "Path to the training data."})
     lazy_preprocess: bool = True
     is_multimodal: bool = False
-    sep_video_conv_front: bool = False
+    sep_video_conv_front: bool = True
     video_token_len: int = 0
     video_folder: Optional[str] = field(default=None)
     frame_aspect_ratio: str = 'square'
@@ -507,7 +535,7 @@ def train():
         cache_dir=training_args.cache_dir,
         # torch_dtype=torch.bfloat16 if training_args.bf16 else torch.float,
     )
-    model.config.use_cache = False
+    model.config.use_cache = True
 
     if model_args.freeze_backbone:
         model.model.requires_grad_(False)
@@ -533,12 +561,20 @@ def train():
     model.config.tune_mm_mlp_adapter = training_args.tune_mm_mlp_adapter = model_args.tune_mm_mlp_adapter
     if model_args.tune_mm_mlp_adapter:
         model.requires_grad_(False)
-        for p in model.get_model().mm_projector.parameters():
+        for p in model.get_model().mm_projector.parameters(): # make s_proj and f_proj trainable
+            p.requires_grad = True
+        for p in model.get_model().s_projector.parameters():
+            p.requires_grad = True
+        for p in model.get_model().f_projector.parameters():
             p.requires_grad = True
 
     model.config.freeze_mm_mlp_adapter = training_args.freeze_mm_mlp_adapter
     if training_args.freeze_mm_mlp_adapter:
-        for p in model.get_model().mm_projector.parameters():
+        for p in model.get_model().mm_projector.parameters(): # freeze s_proj and f_proj
+            p.requires_grad = False
+        for p in model.get_model().s_projector.parameters():
+            p.requires_grad = False
+        for p in model.get_model().f_projector.parameters():
             p.requires_grad = False
 
     model.config.mm_use_vid_start_end = data_args.mm_use_vid_start_end = model_args.mm_use_vid_start_end
@@ -551,6 +587,7 @@ def train():
     params_no_grad = [n for n, p in model.named_parameters() if not p.requires_grad]
     if len(params_no_grad) > 0:
         if training_args.fsdp is not None and len(training_args.fsdp) > 0:
+            print("inside FSDP!!!")
             if len(params_no_grad) < 10:
                 print('[WARNING] Attempting to use FSDP while {} parameters do not require gradients: {}'.format(
                     len(params_no_grad), params_no_grad))
@@ -562,7 +599,8 @@ def train():
             print(
                 "[WARNING] As of 4/30/23, this feature requires PyTorch-nightly build.  See here for details: https://github.com/haotian-liu/LLaVA#experimental-use-fsdp-to-save-memory-in-pretraining")
 
-            from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+            # from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+            from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
             def patch_FSDP_use_orig_params(func):
                 def wrap_func(*args, **kwargs):
                     use_orig_params = kwargs.pop('use_orig_params', True)
