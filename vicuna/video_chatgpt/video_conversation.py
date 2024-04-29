@@ -10,7 +10,6 @@ class SeparatorStyle(Enum):
     TWO = auto()
     MPT = auto()
 
-
 @dataclasses.dataclass
 class Conversation:
     """A class that keeps all conversation history."""

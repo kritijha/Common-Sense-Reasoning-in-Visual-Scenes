@@ -9,7 +9,6 @@ from video_chatgpt.constants import *
 import torch
 
 
-# modify the function
 def load_video(vis_path, n_clips=1, num_frm=100):
     """
     Load video frames from a video file.
@@ -23,8 +22,6 @@ def load_video(vis_path, n_clips=1, num_frm=100):
     list: List of PIL.Image.Image objects representing video frames.
     """
 
-
-    m
     # Load video with VideoReader
     vr = VideoReader(vis_path, ctx=cpu(0))
     total_frame_num = len(vr)
@@ -53,3 +50,102 @@ def load_video(vis_path, n_clips=1, num_frm=100):
     clip_imgs = [Image.fromarray(img_array[0, j]) for j in range(total_num_frm)]
 
     return clip_imgs
+
+
+def get_seq_frames(total_num_frames, desired_num_frames):
+    """
+    Calculate the indices of frames to extract from a video.
+
+    Parameters:
+    total_num_frames (int): Total number of frames in the video.
+    desired_num_frames (int): Desired number of frames to extract.
+
+    Returns:
+    list: List of indices of frames to extract.
+    """
+
+    # Calculate the size of each segment from which a frame will be extracted
+    seg_size = float(total_num_frames - 1) / desired_num_frames
+
+    seq = []
+    for i in range(desired_num_frames):
+        # Calculate the start and end indices of each segment
+        start = int(np.round(seg_size * i))
+        end = int(np.round(seg_size * (i + 1)))
+
+        # Append the middle index of the segment to the list
+        seq.append((start + end) // 2)
+
+    return seq
+
+
+def initialize_model(model_name, projection_path=None):
+    """
+    Initializes the model with given parameters.
+
+    Parameters:
+    model_name (str): Name of the model to initialize.
+    projection_path (str, optional): Path to the projection weights. Defaults to None.
+
+    Returns:
+    tuple: Model, vision tower, tokenizer, image processor, vision config, and video token length.
+    """
+
+    # Disable initial torch operations
+    disable_torch_init()
+
+    # Convert model name to user path
+    model_name = os.path.expanduser(model_name)
+
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    # Load model
+    model = VideoChatGPTLlamaForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True, torch_dtype=torch.float16,
+                                                         use_cache=True)
+
+    # Load image processor
+    image_processor = CLIPImageProcessor.from_pretrained(model.config.mm_vision_tower, torch_dtype=torch.float16)
+
+    # Set to use start and end tokens for video
+    mm_use_vid_start_end = True
+
+    # Add tokens to tokenizer
+    tokenizer.add_tokens([DEFAULT_VIDEO_PATCH_TOKEN], special_tokens=True)
+    if mm_use_vid_start_end:
+        tokenizer.add_tokens([DEFAULT_VID_START_TOKEN, DEFAULT_VID_END_TOKEN], special_tokens=True)
+
+    # Resize token embeddings of the model
+    model.resize_token_embeddings(len(tokenizer))
+
+    # Load the weights from projection_path after resizing the token_embeddings
+    if projection_path:
+        print(f"Loading weights from {projection_path}")
+        status = model.load_state_dict(torch.load(projection_path, map_location='cpu'), strict=False)
+        if status.unexpected_keys:
+            print(f"Unexpected Keys: {status.unexpected_keys}.\nThe Video-ChatGPT weights are not loaded correctly.")
+        print(f"Weights loaded from {projection_path}")
+
+    # Set model to evaluation mode and move to GPU
+    model = model.eval()
+    model = model.cuda()
+
+    vision_tower_name = "openai/clip-vit-large-patch14"
+
+    # Load vision tower and move to GPU
+    vision_tower = CLIPVisionModel.from_pretrained(vision_tower_name, torch_dtype=torch.float16,
+                                                   low_cpu_mem_usage=True).cuda()
+    vision_tower = vision_tower.eval()
+
+    # Configure vision model
+    vision_config = model.get_model().vision_config
+    vision_config.vid_patch_token = tokenizer.convert_tokens_to_ids([DEFAULT_VIDEO_PATCH_TOKEN])[0]
+    vision_config.use_vid_start_end = mm_use_vid_start_end
+    if mm_use_vid_start_end:
+        vision_config.vid_start_token, vision_config.vid_end_token = tokenizer.convert_tokens_to_ids(
+            [DEFAULT_VID_START_TOKEN, DEFAULT_VID_END_TOKEN])
+
+    # Set video token length
+    video_token_len = 356
+
+    return model, vision_tower, tokenizer, image_processor, video_token_len
