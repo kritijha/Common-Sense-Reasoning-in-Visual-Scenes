@@ -142,9 +142,12 @@ TMP_DIR.mkdir(exist_ok=True)
 import zipfile
 import tempfile
 for video in dataset_features:
-#     with open(str(TMP_DIR) + '/' + video+'_fast.pkl','wb') as f:
-#         pickle.dump(dataset_features[video], f)
-    with tempfile.NamedTemporaryFile(dir=TMP_DIR) as f:
+    with open(str(TMP_DIR) + '/' + video+'_fast.pkl','wb') as f:
         pickle.dump(dataset_features[video], f)
-        with zipfile.ZipFile('/kaggle/working/fast.zip', "a", compression=zipfile.ZIP_DEFLATED) as zipf:
-            zipf.write(f.name, video+'_fast.pkl')
+#     with tempfile.NamedTemporaryFile(dir=TMP_DIR) as f:
+#         pickle.dump(dataset_features[video], f)
+#         with zipfile.ZipFile('/kaggle/working/fast.zip', "a", compression=zipfile.ZIP_DEFLATED) as zipf:
+#             zipf.write(f.name, video+'_fast.pkl')
+with zipfile.ZipFile("fast.zip", mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+    for file_path in TMP_DIR.iterdir():
+        archive.write(file_path, arcname=file_path.name)
