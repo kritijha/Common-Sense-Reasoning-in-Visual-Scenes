@@ -17,14 +17,19 @@ from pathlib import Path
 class COMPHY(Dataset):    
     def __init__(self, root):
         super(COMPHY, self,).__init__()
+        print("Comphy constructor !",root)
         self.root_dir = root
         self.files = list(Path(root).rglob("*.mp4"))
+        print("Files : ",self.files)
         self.process = process_video
 
     def __getitem__(self, index):
         path = self.files[index]
         frame_array = self.process(path)
-        name = str(path).split('/')[6]
+        print("Path : ",path)
+        print("before split ")
+        name = str(path).split('\\')[2]
+        print("Name : ",name)
         name = name.split('.')[0]
         return np.array(frame_array), name
     
@@ -33,7 +38,8 @@ class COMPHY(Dataset):
     
 # Convert video in path to array of frames at rate of 2 FPS
 def process_video(path):
-    KPS = 2 # Target Keyframes Per Second
+    print("Processing Video : ",path)
+    KPS = 10 # Target Keyframes Per Second
     frame_array = []
     vidObj = cv2.VideoCapture(str(path))
     success = 1
@@ -47,6 +53,7 @@ def process_video(path):
             im = Image.fromarray(np.uint8(resized)).convert('RGB')
             frame_array.append(im)
         count += 1
+    print("Number of frames extracted ",count)
     return frame_array
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -101,7 +108,8 @@ DIMENSION = H*D
 # Extract penultimate features
 def create_dataset():
     dataset_features = {}
-    for frame_np_array, name in tqdm(COMPHY('/kaggle/input/comphy/target')):
+    for frame_np_array, name in tqdm(COMPHY('activityNet/all_videos/')):
+        print("Name : ",name)
         final_vector = []
         total_number_of_frames = len(frame_np_array)
         avg_pool = AvgPool()
@@ -124,13 +132,15 @@ def create_dataset():
         pe_final_vector = positional_encoding(torch.tensor(final_vector_np))
         pe_final_vector = pe_final_vector.reshape((pe_final_vector.shape[0],total_number_of_frames, 16,1024))
         pe_final_vector = pe_final_vector.reshape((pe_final_vector.shape[1],pe_final_vector.shape[2],pe_final_vector.shape[3]))
-
+        print("Final Vector Shape : ",pe_final_vector.shape)
         feat = pe_final_vector.cpu().detach().numpy()
         dataset_features[name] = feat
 
     return dataset_features
 
 dataset_features = create_dataset()
+
+#dumping mega pickle file.
 
 import pickle
 with open('fast_out.pkl','wb') as f:
@@ -141,6 +151,16 @@ TMP_DIR.mkdir(exist_ok=True)
 
 import zipfile
 import tempfile
+
+#for each video in dataset_features, dump the features to a pickle file and zip it
+
+try :
+    if not os.path.exists('temp'):
+        os.makedirs('temp')
+
+except OSError:
+    print('Error: Creating directory of data')
+
 for video in dataset_features:
     with open(str(TMP_DIR) + '/' + video+'_fast.pkl','wb') as f:
         pickle.dump(dataset_features[video], f)
