@@ -6,7 +6,7 @@ from collections import defaultdict
 '''
 Have all the dataset in a directory named train_dataset.
 '''
-dataset_path = '../train.json'
+dataset_path = 'train.json'
 
 
 def default_value():
