@@ -1,6 +1,6 @@
 # Leveraging VLMs and LLMs for Commonsense Reasoning in Visual Scenes
 
-This work is the final project for CSCI 535: Multimodal Probabilistic Learning of Human Communication at the University of Southern California.
+This work is the final project for CSCI 566: Deep Learning and its Applications at the University of Southern California.
 
 
 This research project aims to advance AI capabilities by leveraging Vision Language Models (VLMs) and Large Language Models (LLMs) to enhance commonsense reasoning within visual contexts. The approach integrates a vision encoder with architectures for temporal and spatial modeling to deepen AI's comprehension and interaction with visual data, particularly videos.
