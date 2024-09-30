@@ -27,3 +27,13 @@ The project utilizes the [Compositional Physical Reasoning (ComPhy) dataset](htt
 All training was performed on 2 Nvidia A100 80GB GPUs.
 ## Model Inference
 ![](vicuna/docs/images/example.png)
+
+## Contributors
+This project was created by the following people:
+
+1. Allan Tan
+2. Anuranjan Pandey
+3. Bharghav Krishnamurthy
+4. Kriti Jha
+5. Pratyush Bhatnagar
+6. Swapnil Chhatre
